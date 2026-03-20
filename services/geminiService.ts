@@ -236,20 +236,23 @@ class GeminiService {
   }
 
   public async sendMessageStream(text: string, onChunk: (text: string) => void): Promise<string> {
-  if (!this.chat) {
-    throw new Error("Chat not initialized");
-  }
-
   try {
-    const result = await this.chat.sendMessage({ message: text });
-    const fullText = result.text || '';
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ message: text }),
+    });
 
-    onChunk(fullText);
+    const data = await response.json();
 
-    return fullText;
+    onChunk(data.reply);
+
+    return data.reply;
   } catch (error: any) {
-    console.error("Error sending message:", error);
-    throw new Error("Error");
+    console.error(error);
+    throw new Error("Server error");
   }
 }
 
