@@ -236,27 +236,22 @@ class GeminiService {
   }
 
   public async sendMessageStream(text: string, onChunk: (text: string) => void): Promise<string> {
-    if (!this.chat) {
-      throw new Error("Chat not initialized");
-    }
-
-    try {
-      // Using standard sendMessage instead of stream to prevent "Ambiguous request" 404 errors
-      // that can occur with StreamGenerateContent on specific model versions/environments.
-      const result = await this.chat.sendMessage({ 
-        message: text,
-        config: { maxOutputTokens: 2048 }
-      });
-      const fullText = result.text || '';
-      
-      // Simulate streaming behavior for the UI
-      onChunk(fullText);
-      
-      return fullText;
-    } catch (error: any) {
-      throw this.handleError(error, "Message Sending");
-    }
+  if (!this.chat) {
+    throw new Error("Chat not initialized");
   }
+
+  try {
+    const result = await this.chat.sendMessage({ message: text });
+    const fullText = result.text || '';
+
+    onChunk(fullText);
+
+    return fullText;
+  } catch (error: any) {
+    console.error("Error sending message:", error);
+    throw new Error("Error");
+  }
+}
 
   public async generateSummary(history: Message[], nativeLanguage: string): Promise<string> {
     try {
