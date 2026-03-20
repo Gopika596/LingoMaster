@@ -13,6 +13,14 @@ const App: React.FC = () => {
   const [initialHistory, setInitialHistory] = useState<Message[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [apiKeyMissing, setApiKeyMissing] = useState(false);
+
+  React.useEffect(() => {
+    const key = process.env.GEMINI_API_KEY || process.env.API_KEY;
+    if (!key) {
+      setApiKeyMissing(true);
+    }
+  }, []);
 
   const handleSetupComplete = async (userConfig: UserConfig) => {
     setConfig(userConfig);
@@ -92,6 +100,40 @@ const App: React.FC = () => {
 
   return (
     <div className="h-full w-full relative">
+      {apiKeyMissing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/90 backdrop-blur-sm p-6">
+          <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-red-100 p-8 text-center">
+            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
+              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Gemini API Key Required</h2>
+            <p className="text-gray-600 mb-8 leading-relaxed">
+              To use LingoMaster, you need to add your Gemini API key as a secret.
+            </p>
+            <div className="space-y-4 text-left bg-gray-50 p-6 rounded-xl border border-gray-100 mb-8">
+              <div className="flex gap-3">
+                <span className="flex-shrink-0 w-6 h-6 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">1</span>
+                <p className="text-sm text-gray-700">Open <strong>Settings</strong> (⚙️ gear icon, top-right corner)</p>
+              </div>
+              <div className="flex gap-3">
+                <span className="flex-shrink-0 w-6 h-6 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">2</span>
+                <p className="text-sm text-gray-700">Select <strong>Secrets</strong></p>
+              </div>
+              <div className="flex gap-3">
+                <span className="flex-shrink-0 w-6 h-6 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">3</span>
+                <p className="text-sm text-gray-700">Add <code>GEMINI_API_KEY</code> as the secret name</p>
+              </div>
+              <div className="flex gap-3">
+                <span className="flex-shrink-0 w-6 h-6 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">4</span>
+                <p className="text-sm text-gray-700">Paste your API key as the value and press <strong>Enter</strong></p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 italic">
+              The app will automatically rebuild after you add the secret.
+            </p>
+          </div>
+        </div>
+      )}
       {appState === AppState.SETUP && (
         <SetupScreen 
           onComplete={handleSetupComplete} 
