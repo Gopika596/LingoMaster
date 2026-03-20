@@ -1,23 +1,34 @@
 import { GoogleGenAI, Chat, Type } from "@google/genai";
 import { Message, VocabularyWord, QuizQuestion } from '../types';
 
-const API_KEY = process.env.API_KEY || '';
-
 class GeminiService {
   private ai: GoogleGenAI;
   private chat: Chat | null = null;
 
   constructor() {
-    this.ai = new GoogleGenAI({ apiKey: API_KEY });
+    // No longer throwing in the constructor to allow the app to load even if the key is missing.
+    // We will check for the key when an API call is made.
+  }
+
+  private getAI(): GoogleGenAI {
+    if (this.ai) return this.ai;
+    
+    const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+    if (!apiKey) {
+      throw new Error("API key is missing. Please add your GEMINI_API_KEY to the Secrets menu (⚙️ Settings -> Secrets) and wait for the app to rebuild.");
+    }
+    this.ai = new GoogleGenAI({ apiKey });
+    return this.ai;
   }
 
   public async generateVocabulary(scenario: string, nativeLanguage: string, history: Message[] = []): Promise<VocabularyWord[]> {
     try {
+      const ai = this.getAI();
       const conversationContext = history.length > 0 
         ? `\n\n**CONVERSATION CONTEXT:**\n${history.map(m => `${m.role}: ${m.text}`).join('\n')}`
         : '';
 
-      const response = await this.ai.models.generateContent({
+      const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: {
           parts: [
@@ -62,8 +73,9 @@ class GeminiService {
 
   public async generateQuiz(words: VocabularyWord[], nativeLanguage: string): Promise<QuizQuestion[]> {
     try {
+      const ai = this.getAI();
       const wordsText = words.map(w => `${w.word}: ${w.definition}`).join('\n');
-      const response = await this.ai.models.generateContent({
+      const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: {
           parts: [
@@ -154,12 +166,13 @@ class GeminiService {
 
   public async initializeChat(nativeLanguage: string, scenario: string, history: Message[] = []): Promise<string> {
     try {
+      const ai = this.getAI();
       const geminiHistory = history.map(m => ({
         role: m.role,
         parts: [{ text: m.text }]
       }));
 
-      this.chat = this.ai.chats.create({
+      this.chat = ai.chats.create({
         model: 'gemini-2.5-flash',
         config: {
           systemInstruction: this.getSystemInstruction(nativeLanguage, scenario),
@@ -229,11 +242,12 @@ class GeminiService {
 
   public async generateSummary(history: Message[], nativeLanguage: string): Promise<string> {
     try {
+      const ai = this.getAI();
       const conversationText = history
         .map(m => `${m.role === 'user' ? 'Student' : 'Tutor'}: ${m.text}`)
         .join('\n\n');
 
-      const response = await this.ai.models.generateContent({
+      const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: {
           parts: [
