@@ -16,10 +16,19 @@ const App: React.FC = () => {
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
 
   React.useEffect(() => {
-    const key = process.env.GEMINI_API_KEY || process.env.API_KEY;
-    if (!key) {
-      setApiKeyMissing(true);
-    }
+    const checkKey = async () => {
+      const key = process.env.GEMINI_API_KEY || process.env.API_KEY;
+      if (!key || key === 'undefined' || key === 'null' || key === '') {
+        setApiKeyMissing(true);
+      } else {
+        // Even if key exists, let's verify it's working
+        const isWorking = await geminiService.testConnection();
+        if (!isWorking) {
+          setApiKeyMissing(true);
+        }
+      }
+    };
+    checkKey();
   }, []);
 
   const handleSetupComplete = async (userConfig: UserConfig) => {
@@ -49,7 +58,8 @@ const App: React.FC = () => {
       setInitialHistory([initialMsg]);
       setAppState(AppState.CHAT);
     } catch (error: any) {
-      alert(error.message || "Failed to start session. Please check your API key or connection.");
+      const errorMsg = error.message || "Failed to start session.";
+      alert(`${errorMsg}\n\nTip: If you just added your API key, please wait a few seconds and try again.`);
       console.error(error);
     } finally {
       setIsLoading(false);
@@ -109,6 +119,15 @@ const App: React.FC = () => {
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Gemini API Key Required</h2>
             <p className="text-gray-600 mb-8 leading-relaxed">
               To use LingoMaster, you need to add your Gemini API key as a secret.
+              <br />
+              <a 
+                href="https://aistudio.google.com/app/apikey" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-indigo-600 hover:text-indigo-700 font-medium underline underline-offset-4"
+              >
+                Get a free API key here
+              </a>
             </p>
             <div className="space-y-4 text-left bg-gray-50 p-6 rounded-xl border border-gray-100 mb-8">
               <div className="flex gap-3">
@@ -128,9 +147,15 @@ const App: React.FC = () => {
                 <p className="text-sm text-gray-700">Paste your API key as the value and press <strong>Enter</strong></p>
               </div>
             </div>
-            <p className="text-xs text-gray-500 italic">
+            <p className="text-xs text-gray-500 italic mb-6">
               The app will automatically rebuild after you add the secret.
             </p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-colors shadow-lg shadow-indigo-200"
+            >
+              I've added the key, refresh app
+            </button>
           </div>
         </div>
       )}
