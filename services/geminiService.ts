@@ -14,11 +14,26 @@ class GeminiService {
     if (this.ai) return this.ai;
     
     const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
-    if (!apiKey) {
-      throw new Error("API key is missing. Please add your GEMINI_API_KEY to the Secrets menu (⚙️ Settings -> Secrets) and wait for the app to rebuild.");
+    if (!apiKey || apiKey === 'undefined' || apiKey === 'null') {
+      throw new Error("API key is missing or invalid. Please add your GEMINI_API_KEY to the Secrets menu (⚙️ Settings -> Secrets).");
     }
     this.ai = new GoogleGenAI({ apiKey });
     return this.ai;
+  }
+
+  public async testConnection(): Promise<boolean> {
+    try {
+      const ai = this.getAI();
+      await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: [{ parts: [{ text: 'hi' }] }],
+        config: { maxOutputTokens: 1 }
+      });
+      return true;
+    } catch (error) {
+      console.error("API Connection test failed:", error);
+      return false;
+    }
   }
 
   public async generateVocabulary(scenario: string, nativeLanguage: string, history: Message[] = []): Promise<VocabularyWord[]> {
@@ -42,6 +57,7 @@ class GeminiService {
           ]
         },
         config: {
+          maxOutputTokens: 2048,
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.ARRAY,
@@ -66,8 +82,7 @@ class GeminiService {
         mastery: 0
       }));
     } catch (error: any) {
-      console.error("Vocabulary generation error:", error);
-      throw new Error(`Failed to generate vocabulary: ${error.message}`);
+      throw this.handleError(error, "Vocabulary Generation");
     }
   }
 
@@ -90,6 +105,7 @@ class GeminiService {
           ]
         },
         config: {
+          maxOutputTokens: 2048,
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.ARRAY,
@@ -119,8 +135,7 @@ class GeminiService {
         };
       });
     } catch (error: any) {
-      console.error("Quiz generation error:", error);
-      throw new Error(`Failed to generate quiz: ${error.message}`);
+      throw this.handleError(error, "Quiz Generation");
     }
   }
 
@@ -173,7 +188,7 @@ class GeminiService {
       }));
 
       this.chat = ai.chats.create({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3-flash-preview',
         config: {
           systemInstruction: this.getSystemInstruction(nativeLanguage, scenario),
         },
@@ -187,24 +202,37 @@ class GeminiService {
 
       // We trigger the first message to start the roleplay based on the instruction
       const response = await this.chat.sendMessage({
-        message: `I am ready to start. My native language is ${nativeLanguage}. Please start the scenario: ${scenario}. Remember to provide translations for EVERYTHING you say.`
+        message: `I am ready to start. My native language is ${nativeLanguage}. Please start the scenario: ${scenario}. Remember to provide translations for EVERYTHING you say.`,
+        config: { maxOutputTokens: 2048 }
       });
       
       return response.text || "Hello! I'm ready to help you practice.";
     } catch (error: any) {
-      console.error("Failed to initialize chat:", error);
-      let errorMessage = "Failed to start session. Please check your connection.";
-      
-      if (error?.message?.includes('API_KEY_INVALID') || error?.message?.includes('API key not valid')) {
-        errorMessage = "Invalid API Key. Please check your configuration.";
-      } else if (error?.message?.includes('429') || error?.message?.includes('quota')) {
-        errorMessage = "Rate limit exceeded. Please wait a moment.";
-      } else if (error?.message) {
-        errorMessage = `Initialization Error: ${error.message}`;
-      }
-      
-      throw new Error(errorMessage);
+      throw this.handleError(error, "Chat Initialization");
     }
+  }
+
+  private handleError(error: any, context: string): Error {
+    console.error(`${context} error:`, error);
+    let errorMessage = `I encountered an error during ${context}.`;
+    
+    const msg = error?.message?.toLowerCase() || "";
+    
+    if (msg.includes('api_key_invalid') || msg.includes('api key not valid') || msg.includes('invalid api key')) {
+      errorMessage = "Invalid API Key. Please check your configuration in Settings -> Secrets.";
+    } else if (msg.includes('429') || msg.includes('quota') || msg.includes('rate limit')) {
+      errorMessage = "Rate limit exceeded or quota reached. Please wait a moment before trying again.";
+    } else if (msg.includes('safety')) {
+      errorMessage = "The content was flagged by safety filters. Please try rephrasing your request.";
+    } else if (msg.includes('max tokens') || msg.includes('exceeded max tokens')) {
+      errorMessage = "The response was too long for the current limit. I've adjusted the settings, please try again.";
+    } else if (msg.includes('network') || msg.includes('fetch') || msg.includes('failed to fetch')) {
+      errorMessage = "Network error. Please check your internet connection and try again.";
+    } else if (error?.message) {
+      errorMessage = `${context} Error: ${error.message}`;
+    }
+    
+    return new Error(errorMessage);
   }
 
   public async sendMessageStream(text: string, onChunk: (text: string) => void): Promise<string> {
@@ -215,7 +243,10 @@ class GeminiService {
     try {
       // Using standard sendMessage instead of stream to prevent "Ambiguous request" 404 errors
       // that can occur with StreamGenerateContent on specific model versions/environments.
-      const result = await this.chat.sendMessage({ message: text });
+      const result = await this.chat.sendMessage({ 
+        message: text,
+        config: { maxOutputTokens: 2048 }
+      });
       const fullText = result.text || '';
       
       // Simulate streaming behavior for the UI
@@ -223,20 +254,7 @@ class GeminiService {
       
       return fullText;
     } catch (error: any) {
-      console.error("Error sending message:", error);
-      let errorMessage = "I encountered an error while processing your request.";
-      
-      if (error?.message?.includes('API_KEY_INVALID') || error?.message?.includes('API key not valid')) {
-        errorMessage = "Invalid API Key. Please check your configuration.";
-      } else if (error?.message?.includes('429') || error?.message?.includes('quota')) {
-        errorMessage = "Rate limit exceeded. Please wait a moment before sending another message.";
-      } else if (error?.message?.includes('safety')) {
-        errorMessage = "The message was flagged by safety filters. Please try rephrasing.";
-      } else if (error?.message) {
-        errorMessage = `Service Error: ${error.message}`;
-      }
-      
-      throw new Error(errorMessage);
+      throw this.handleError(error, "Message Sending");
     }
   }
 
@@ -265,12 +283,12 @@ class GeminiService {
             
             Format the output using clear Markdown headers and bullet points.` }
           ]
-        }
+        },
+        config: { maxOutputTokens: 2048 }
       });
       return response.text || "I couldn't generate a summary at this time.";
     } catch (error: any) {
-      console.error("Summary generation error:", error);
-      throw new Error(`Failed to generate summary: ${error.message}`);
+      throw this.handleError(error, "Summary Generation");
     }
   }
 }
